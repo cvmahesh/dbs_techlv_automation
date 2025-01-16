@@ -1,0 +1,17 @@
+skip_list_directories: false
+list_directories:
+  - /Users/mahesh/workspace/testing/DIR1
+  - /Users/mahesh/workspace/testing/DIR2
+
+skip_diff_directories: false
+diff_directories:
+  - [/Users/mahesh/workspace/testing/DIR1, /Users/mahesh/workspace/testing/DIR2]
+  - [/Users/mahesh/workspace/testing/DIR4, /Users/mahesh/workspace/testing/DIR3]
+
+skip_checksum_files: false
+checksum_files:
+  - [/Users/mahesh/workspace/testing/DIR1, /Users/mahesh/workspace/testing/DIR2]
+  - [/Users/mahesh/workspace/testing/DIR4, /Users/mahesh/workspace/testing/DIR3]
+
+
+
