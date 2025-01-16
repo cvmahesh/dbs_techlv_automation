@@ -1,53 +1,92 @@
 #!/bin/bash
 
-# Function to execute a shell command
-execute_shell_command() {
-    local command="$1"
-    echo "Executing: $command"
-    eval "$command"
-    if [ $? -ne 0 ]; then
-        echo "Error executing command: $command"
-    fi
+# Define the YAML file path
+yaml_file="config.yaml"
+
+# Function to extract values from the YAML file
+extract_value() {
+    key="$1"
+    grep -A 100 "$key:" "$yaml_file" |
+    awk -v RS="" -v key="$key" '/^ *- / {sub(key":", ""); print}' |
+    sed -n "/^ *- / {s/^- //; p;}"
 }
 
-# Process YAML file
-process_yaml() {
-    local yaml_file="$1"
+# extract_list_directories() {
+#     grep -A 100 "^list_directories:" "$yaml_file" |
+#     awk '/^  - / {print $2}'
+# }
 
-    if [ ! -f "$yaml_file" ]; then
-        echo "YAML file '$yaml_file' not found!"
-        exit 1
-    fi
+extract_list_directories() {
+    grep -A 100 "^list_directories:" "$yaml_file" | 
+    awk 'NF {print $0} /^$/ {exit}'   # Stop when an empty line is encountered
+    #awk '/^  - / {print $2}'           # Extract lines starting with "  - "
+}
 
-    # Parse list_directories
-    local list_dirs=$(yq e '.list_directories[]' "$yaml_file")
-    for directory in $list_dirs; do
-        execute_shell_command "ls -ltr $directory"
-    done
+extract_diff_directories() {
+    grep -A 100 "^diff_directories:" "$yaml_file" | 
+    awk 'NF {print $0} /^$/ {exit}' | # Stop when an empty line is encountered
+    awk '/^  - / {print $2}'           # Extract lines starting with "  - "
+}
 
-    # Parse diff_directories
-    local diff_dirs_count=$(yq e '.diff_directories | length' "$yaml_file")
-    for ((i=0; i<diff_dirs_count; i++)); do
-        local dir1=$(yq e ".diff_directories[$i][0]" "$yaml_file")
-        local dir2=$(yq e ".diff_directories[$i][1]" "$yaml_file")
-        execute_shell_command "diff $dir1 $dir2"
-    done
 
-    # Parse checksum_files
-    local checksum_files_count=$(yq e '.checksum_files | length' "$yaml_file")
-    for ((i=0; i<checksum_files_count; i++)); do
-        local files=$(yq e ".checksum_files[$i][]" "$yaml_file")
-        for file in $files; do
-            execute_shell_command "md5sum $file"
-        done
+# Parse the values from the YAML file
+skip_list_directories=$(grep "skip_list_directories" "$yaml_file" | awk '{print $2}')
+list_directories=$(extract_list_directories )
+
+skip_diff_directories=$(grep "skip_diff_directories" "$yaml_file" | awk '{print $2}')
+diff_directories=$(extract_diff_directories  )
+
+skip_checksum_files=$(grep "skip_checksum_files" "$yaml_file" | awk '{print $2}')
+checksum_files=$(extract_value "checksum_files")
+
+# Function to list directories
+list_dirs() {
+    echo "Listing directories:"
+    for dir in $list_directories; do
+        echo ">>>>>>>>> Contents of $dir:"
+        ls -l "$dir"
     done
 }
 
-# Main script
-if [ "$#" -ne 1 ]; then
-    echo "Usage: $0 <yaml_file>"
-    exit 1
+# Function to perform diff between directories
+diff_dirs() {
+    echo "Performing diff on directories:"
+    echo "$diff_directories" | while read -r pair; do
+        dir1=$(echo "$pair" | cut -d',' -f1 | sed 's/[\[\]]//g')
+        dir2=$(echo "$pair" | cut -d',' -f2 | sed 's/[\[\]]//g')
+        echo "Diff between $dir1 and $dir2:"
+        diff -rq "$dir1" "$dir2"
+    done
+}
+
+# Function to compute checksum for files
+checksum_files_fn() {
+    echo "Computing checksums for files:"
+    echo "$checksum_files" | while read -r pair; do
+        file1=$(echo "$pair" | cut -d',' -f1 | sed 's/[\[\]]//g')
+        file2=$(echo "$pair" | cut -d',' -f2 | sed 's/[\[\]]//g')
+        echo "Checksum for $file1:"
+        sha256sum "$file1"
+        echo "Checksum for $file2:"
+        sha256sum "$file2"
+    done
+}
+
+# Execute based on parsed configuration
+if [ "$skip_list_directories" = "false" ]; then
+    list_dirs
+else
+    echo "Skipping directory listing."
 fi
 
-yaml_file="$1"
-process_yaml "$yaml_file"
+if [ "$skip_diff_directories" = "false" ]; then
+    diff_dirs
+else
+    echo "Skipping directory diff."
+fi
+
+# if [ "$skip_checksum_files" = "false" ]; then
+#     checksum_files_fn
+# else
+#     echo "Skipping checksum calculation."
+# fi
