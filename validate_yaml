@@ -1,0 +1,66 @@
+#!/bin/bash
+
+# Define the YAML file path
+YAML_FILE="config.yaml"
+
+# Check if the YAML file exists
+if [ ! -f "$YAML_FILE" ]; then
+    echo "Error: YAML file '$YAML_FILE' not found."
+    exit 1
+fi
+
+# Function to validate a boolean field
+validate_boolean_field() {
+    local FIELD_NAME=$1
+    local FIELD_VALUE
+    FIELD_VALUE=$(grep "^$FIELD_NAME:" "$YAML_FILE" | awk '{print $2}')
+    if [[ "$FIELD_VALUE" != "true" && "$FIELD_VALUE" != "false" ]]; then
+        echo "Error: Field '$FIELD_NAME' must be either 'true' or 'false'. Found: $FIELD_VALUE"
+        exit 1
+    fi
+}
+
+# Function to validate a list field
+validate_list_field() {
+    local FIELD_NAME=$1
+    local FIELD_LINES
+    FIELD_LINES=$(awk "/^$FIELD_NAME:/,/^[^[:space:]]/" "$YAML_FILE" | sed '1d;$d')
+    if [[ -z "$FIELD_LINES" ]]; then
+        echo "Error: Field '$FIELD_NAME' must contain at least one entry."
+        exit 1
+    fi
+    while IFS= read -r LINE; do
+        if [[ ! "$LINE" =~ ^\ *- ]]; then
+            echo "Error: Invalid list item in '$FIELD_NAME': $LINE"
+            exit 1
+        fi
+    done <<<"$FIELD_LINES"
+}
+
+# Function to validate paired list fields (e.g., diff_directories, checksum_files)
+validate_paired_list_field() {
+    local FIELD_NAME=$1
+    local FIELD_LINES
+    FIELD_LINES=$(awk "/^$FIELD_NAME:/,/^[^[:space:]]/" "$YAML_FILE" | sed '1d;$d')
+    if [[ -z "$FIELD_LINES" ]]; then
+        echo "Error: Field '$FIELD_NAME' must contain at least one pair of directories."
+        exit 1
+    fi
+    while IFS= read -r LINE; do
+        if [[ ! "$LINE" =~ ^\ *- \[.*\]$ ]]; then
+            echo "Error: Invalid paired list item in '$FIELD_NAME': $LINE"
+            exit 1
+        fi
+    done <<<"$FIELD_LINES"
+}
+
+# Validate individual fields
+validate_boolean_field "skip_list_directories"
+validate_list_field "list_directories"
+validate_boolean_field "skip_diff_directories"
+validate_paired_list_field "diff_directories"
+validate_boolean_field "skip_checksum_files"
+validate_paired_list_field "checksum_files"
+
+# If all validations pass
+echo "YAML file validation successful."
